@@ -1,0 +1,4 @@
+#!/bin/bash
+# Automatically generate a license header for the given files
+if (pwd | grep "xlr"); then PROJ=XL; else PROJ=Tao3D; fi
+headerize -P $PROJ $(git ls-files '*.pro' '*.pri' '*.cpp' '*.h' '*.tbl' '*.x[ls]' 'Make*' )

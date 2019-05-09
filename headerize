@@ -1,0 +1,254 @@
+#!/bin/bash
+# *****************************************************************************
+#  headerize
+# *****************************************************************************
+#
+#   File Description:
+#
+#      Automatically generate a license header for the given files
+#
+#
+#
+#
+#
+#
+#
+#
+# *****************************************************************************
+#   (C) 2019 Christophe de Dinechin <christophe@dinechin.org>
+#   This software is licensed under the GNU General Public License v3
+# *****************************************************************************
+#   headerize is free software: you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation, either version 3 of the License, or
+#   (at your option) any later version.
+#
+#   headerize is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#
+#   You should have received a copy of the GNU General Public License
+#   along with Tao3D.  If not, see <https://www.gnu.org/licenses/>.
+# *****************************************************************************
+
+PROJECT="Tao3D"
+LICENSE="General Public License"
+VERSION="3"
+
+filler() {
+    CMD="                                               \
+        BEGIN {                                         \
+            slen=length(start);                         \
+            elen=length(end);                           \
+            llen=length(left);                          \
+            flen=length(fill);                          \
+            rlen=length(right);                         \
+            fills=79-(slen+elen+llen+rlen);             \
+            spc=(flen > 0 && fill != \" \");            \
+            printf \"%s\", start;                       \
+            if (llen + rlen + elen + spc > 0)           \
+                printf \" %s\", left;                   \
+            if (spc + rlen + elen > 0)                  \
+            {                                           \
+                for (i = 0; i < fills; i++)             \
+                    printf \"%s\", fill;                \
+                printf \"%s%s\", right, end;            \
+            }                                           \
+            printf \"\\n\";                             \
+        }"
+
+    awk -v fill="$1" -v left="$2" -v right="$3"         \
+        -v start="$COMMENT_START"                       \
+        -v end="$COMMENT_END"                           \
+        "$CMD"
+}
+
+
+comment() {
+    filler " " "$1" "$2"
+}
+
+header() {
+    CMD="                                               \
+        BEGIN { sep=0; line=0; descr=0; }               \
+        /File [Dd]escription:/ { descr=1; next; }       \
+        /[*][*][*][*][*]*/ { sep++; next; }             \
+        sep == 2 && descr > 0 { print; line++; }        \
+        END {                                           \
+            slen=length(start);                         \
+            elen=length(end);                           \
+            spc=(flen > 0 && fill != \" \");            \
+            fills=79-(slen+elen);                       \
+            while (line < 8)                            \
+            {                                           \
+                printf \"%s\", start;                   \
+                if (elen > 0)                           \
+                {                                       \
+                    for (i = 0; i < fills; i++)         \
+                        printf \" \";                   \
+                    printf \"%s\", end;                 \
+                }                                       \
+                printf \"\\n\";                         \
+                line++;                                 \
+            }                                           \
+        }"
+
+    awk -v start="$COMMENT_START"                       \
+        -v end="$COMMENT_END"                           \
+        "$CMD" < "$1"
+}
+
+body() {
+    CMD="                                               \
+        BEGIN { last=0; line=0 }                        \
+        { line++; }                                     \
+        /^#[ ]*include/ && last > 0 { line=100; }       \
+        /^#[ ]*define/ && last > 0 { line=100; }        \
+        /^#[ ]*undef/ && last > 0 { line=100; }         \
+        /^#[ ]*if/ && last > 0 { line=100; }            \
+        /[*][*][*][*][*]*/ && line <= 55 {              \
+            last=line; next;                            \
+        }                                               \
+        END { print last; }"
+
+    LAST=`awk "$CMD" < "$1" `
+
+    CMD="                                               \
+        BEGIN { line=0 }                                \
+        { line++; }                                     \
+        /^#[ ]*if/ && line < 3 { next; }                \
+        /^#[ ]*define/ && line < 3 { next; }            \
+        line > last { print; }"
+
+    awk -v last=$LAST "$CMD" < "$1"
+}
+
+header_guard() {
+    CMD="                                               \
+        BEGIN { line=0 }                                \
+        { line++; }                                     \
+        line >= 3 { exit; }                             \
+        /^#[ ]*if/ { print; }                           \
+        /^#[ ]*define/ { print; }"
+
+
+    awk -v last=$LAST "$CMD" < "$1"
+}
+
+select_comment() {
+    COMMENT_START="$1"
+    COMMENT_END="$2"
+}
+
+
+regenerate() {
+    header_guard "$F"
+
+    filler "*"
+    comment "$(basename $F)" "$PROJECT project"
+    filler "*"
+    comment
+    comment "File description:"
+    header "$F"
+    filler "*"
+    comment "This software is licensed under the GNU $LICENSE v$VERSION+"
+
+    AUTHORS=`git log --follow --format='%aN' $F | sort -u | sed -e 's/ /_/g'`
+    for NA in $AUTHORS; do
+        A=`echo $NA | sed -e 's/_/ /g'`
+        AP="$A"
+        SKIP=no
+        if (echo "$A" | grep -q "Jerome") &&                    \
+           (echo "$AUTHORS" | grep -q "Jérôme"); then
+            SKIP=yes
+        fi
+        if (echo "$A" | grep -q "descubes") &&                  \
+           (echo "$AUTHORS" | grep -q "Dinechin"); then
+            SKIP=yes
+        fi
+        if (echo "$A" | grep -q "Soulisse Baptiste") &&         \
+           (echo "$AUTHORS" | grep -q "Baptiste Soulisse"); then
+            SKIP=yes
+        fi
+        if (echo "$A" | grep -q "unknown.*Christophe@") &&      \
+           (echo "$AUTHORS" | grep -q "Dinechin"); then
+            SKIP=yes
+        fi
+        if (echo "$A" | grep -q "unnknown.*Psy@") &&            \
+           (echo "$AUTHORS" | grep -q "Baptiste Soulisse"); then
+            SKIP=yes
+        fi
+
+        # Skip misspelling that are corrected in original name
+        if [ "$SKIP" == "no" ]; then
+
+            if (echo "$A" | grep -q "Dinechin"); then
+                AP="Dinechin\\|descubes\\|Christophe"
+            fi
+            if (echo "$A" | grep -q "Forissier"); then
+                AP="Forissier"
+            fi
+            if (echo "$A" | grep -q "Soulisse"); then
+                AP="Soulisse\\|Psy@"
+            fi
+            GITLOG=`git log --follow --format='%aN <%aE>' "$F" | grep "$AP" | sort -u `
+            EMAILS=`git log --follow --format='%aN <%aE>' "$F" | grep "$AP" | sort -u | head -1 | sed -e 's/Jerome/Jérôme/g' -e 's/thejcab.*/Juan Carlos Arevalo Baeza <thejcab@sourceforge.net>/g' -e 's/sebbrochet.*/Sébastien Brochet <sebbrochet@sourceforge.net>/g' -e 's/lksw.*/Lionel Schaffhauser <lionel@taodyne.com>/g'  -e 's/unknown.*Psy@.*/Baptiste Soulisse <baptiste.soulisse@taodyne.com>/g' -e 's/unknown.*Christophe@.*/Christophe de Dinechin <christophe@dinechin.org>/g'  -e 's/descubes.*/Christophe de Dinechin <christophe@dinechin.org>/g' `
+            YEARS=`git log --follow --format='%ad %aN <%aE>' --date='format:%Y' "$F" | grep "$AP" | sort -un | awk ' BEGIN { first=last=0; } { year=$1; if (last && last!=year-1) { if (last > first) printf "%d-%d,", first, last; else printf "%d,", last; last = 0; } if (!last) { first=year; } last=year; } END { if (last > first) printf "%d-%d,", first, last; else printf "%d,", last }' `
+            comment "(C) "$YEARS" $EMAILS"
+        fi
+    done
+
+    filler "*"
+
+    comment "This file is part of $PROJECT"
+    comment
+    comment "$PROJECT is free software: you can redistribute it and/or modify"
+    comment "it under the terms of the GNU $LICENSE as published by"
+    comment "the Free Software Foundation, either version 3 of the License,"
+    comment "or (at your option) any later version."
+    comment
+    comment "$PROJECT is distributed in the hope that it will be useful,"
+    comment "but WITHOUT ANY WARRANTY; without even the implied warranty of"
+    comment "MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the"
+    comment "GNU $LICENSE for more details."
+    comment
+    comment "You should have received a copy of the GNU $LICENSE"
+    comment "along with $PROJECT, in a file named COPYING."
+    comment "If not, see <https://www.gnu.org/licenses/>."
+    filler "*"
+
+    body "$F"
+}
+
+while [ $# -gt 0 ]; do
+
+    F="";
+    case "$1" in
+        -project|-p|-P)         PROJECT="$2"; shift;;
+        -lgpl|-LGPL|-l|-L)      LICENSE="Lesser General Public License";;
+        -v2)                    VERSION="2";;
+        -v3)                    VERSION="3";;
+
+        *.cpp)                  F="$1"; select_comment "//" "";;
+        *.c)                    F="$1"; select_comment "//" "";;
+        *.h)                    F="$1"; select_comment "//" "";;
+        *.tbl)                  F="$1"; select_comment "//" "";;
+        *.xl)                   F="$1"; select_comment "//" "";;
+        *.xs)                   F="$1"; select_comment "//" "";;
+        Make*)                  F="$1"; select_comment "#" "";;
+        *.pro)                  F="$1"; select_comment "#" "";;
+        *.pri)                  F="$1"; select_comment "#" "";;
+        *)                      F="$1"; select_comment "#" "";;
+    esac
+
+    if [ ! -z "$F" ]; then
+        echo "Processing $F"
+
+        # Remove crappy BOM marker left by stupid Windows
+        sed $'1s/^\xEF\xBB\xBF//' < "$F" > "$F".tmp && mv "$F".tmp "$F"
+        regenerate > "$F".tmp && mv "$F".tmp "$F"
+        sed -e 's/[ ][ ]*$//g' < "$F" > "$F".tmp && mv "$F".tmp "$F"
+    fi
+    shift
+done
